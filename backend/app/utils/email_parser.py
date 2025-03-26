@@ -5,6 +5,7 @@ from email.parser import BytesParser
 from typing import Dict, List
 from io import BytesIO
 from .extract_text_from_attachment import extract_text_from_attachment
+from .store_email_to_db import store_email
 
 def parse_email(eml_content: bytes) -> Dict:
     """
@@ -49,6 +50,16 @@ def parse_email(eml_content: bytes) -> Dict:
     for attachment in email_data["attachments"]:
         text = extract_text_from_attachment(attachment["filename"], attachment["content"])
         attachments.append({"filename": attachment["filename"], "extracted_text": text})
+    
+    # check if duplicate
+    # store else
+    email_db_attribute = store_email({
+        "subject": subject,
+        "from": sender,
+        "to": recipients,
+        "body": body or "",
+        "attachments": attachments,
+    })
 
     return {
         "subject": subject,
@@ -56,4 +67,6 @@ def parse_email(eml_content: bytes) -> Dict:
         "to": recipients,
         "body": body or "",
         "attachments": attachments,
+        "email_id": email_db_attribute.get("email_id"),
+        "is_duplicate": email_db_attribute.get("is_duplicate")
     }

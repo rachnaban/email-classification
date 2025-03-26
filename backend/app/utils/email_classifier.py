@@ -1,4 +1,3 @@
-import os
 import logging
 import re
 import google.generativeai as genai
@@ -6,9 +5,8 @@ from typing import List, Optional, Dict
 from dataclasses import dataclass
 import json
 import time
-from dotenv import load_dotenv
+from app.utils.get_api_key import api_key
 
-load_dotenv()
 
 # Configure Logging
 logging.basicConfig(
@@ -18,14 +16,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load API Key Securely
-def get_api_key() -> str:
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        logger.critical("API key is missing. Set GEMINI_API_KEY as an environment variable.")
-        raise ValueError("API key is required")
-    return api_key
 
-API_KEY = get_api_key()
+
+try:
+    API_KEY = api_key()
+    logger.info("API Key loaded successfully")
+except Exception as e:
+    logger.critical("API key is missing. Set GEMINI_API_KEY as an environment variable.")
+    raise RuntimeError("API Key loading failed") from e
 
 # Configure Gemini API with Exception Handling
 try:
@@ -232,8 +230,57 @@ def extract_output(email_text: str, temperature: float = 0.2) -> str:
         logger.critical("Unexpected error", exc_info=True)
         return json.dumps({"error": str(e)}, indent=2)
 
+def update_email(email_id: int, category_type: str, category: str):
+    from app.db import Email
+    from app.db.email_repo import EmailRepo
+    try:
+        emailRepo = EmailRepo()
+        email = emailRepo.get_email(email_id)
+        email.category_type = category_type
+        email.category = category
+        emailRepo.update_email(email)
+        emailRepo.close()
+        logger.info("Table Email is updated:\n%s", email_id)
+    except Exception as e:
+        logger.critical("Unexpected error while updating table: %s", str(e), exc_info=True)
 
-def classify_email(text) -> Dict:
-    print("=====", text)
-    results = extract_output(text, temperature=0.2)
-    return results
+def generate_final_response(text: str, temperature: float = 0.2, retries: int = 3, email_id = None, category_type = None) -> str:
+    """Generate summary using Gemini API with retries."""
+    text = validate_input(text)
+    prompt = f"""
+    Categorize following financial result based on named entities, key phrases and summary 
+    into request type, request sub type, deal name and confidence score. 
+    Focus on the key financial actions and requests made.
+
+    result:
+    {text}
+    """
+    for attempt in range(retries):
+        try:
+            response = MODEL.generate_content(prompt, generation_config={"temperature": temperature})
+            response_text = response.text.strip() if hasattr(response, 'text') and response.text else ""
+            if response_text:
+                update_email(email_id, category_type, response_text)
+                logger.info("Gemini Final Response:\n%s", response_text)
+                return response_text
+            logger.warning("Received empty response from Gemini API for summary")
+        except genai.GoogleGenerativeAIError as api_error:
+            logger.error("Gemini API error: %s", str(api_error), exc_info=True)
+        except Exception as e:
+            logger.critical("Unexpected error in FInal Response generation: %s", str(e), exc_info=True)
+
+        time.sleep(2 ** attempt)
+
+    return "Final response generation failed."
+
+def classify_email(selectedItems: Dict) -> Dict:
+    text = selectedItems.get("text")
+    email_id = selectedItems.get("email_id")
+    category_type = selectedItems.get("category_type")
+    print("Email ID:", email_id)
+    print("Category Type:", category_type)
+    
+    result = extract_output(text, temperature=0.2)
+    final_output = generate_final_response(result, temperature=0.2, email_id=email_id, category_type=category_type)
+    print(final_output)
+    return final_output

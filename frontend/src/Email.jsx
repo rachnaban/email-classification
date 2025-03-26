@@ -2,6 +2,7 @@
 
 import React, { useState } from "react"
 import "./email.css"
+import Report from "./Report"
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -31,7 +32,7 @@ async function classifyEmail(selectedItems) {
 	return apiCall("/email/classify", "POST", selectedItems)
 }
 
-export default function NewEmail() {
+export default function Email() {
 	const [uploadedFile, setUploadedFile] = useState(null)
 	const [emailData, setEmailData] = useState({
 		body: "",
@@ -45,7 +46,8 @@ export default function NewEmail() {
 	const [message, setMessage] = useState("")
 	const [selectedAttachments, setSelectedAttachments] = useState({})
 	const [classificationResults, setClassificationResults] = useState(null)
-	const [classificationInProgress, setClassificationInProgress] = useState(false)
+	const [classificationInProgress, setClassificationInProgress] =
+		useState(false)
 
 	const handleFileChange = (event) => {
 		setUploadedFile(event.target.files[0])
@@ -82,6 +84,7 @@ export default function NewEmail() {
 					subject: data?.subject,
 					from: data?.from,
 					to: data?.to,
+					id: data?.email_id,
 				})
 				setMessage("✅ Upload successful!") // 🔹 Success message
 			})
@@ -92,9 +95,26 @@ export default function NewEmail() {
 			.finally(() => setLoading(false)) // 🔹 Stop loading
 	}
 
+	console.log({ selectedAttachments })
+
+	const hasSelectedAttachments = Object.values(selectedAttachments).some(
+		(value) => value
+	)
+
+	const category_type =
+		isIntentSourceBody && !hasSelectedAttachments
+			? "BODY"
+			: isIntentSourceBody && hasSelectedAttachments
+			? "BODYANDATTACHMENT"
+			: !isIntentSourceBody && hasSelectedAttachments
+			? "ATTACHMENT"
+			: null
+
 	const onProceedClick = () => {
 		const selectedItems = {
 			body: isIntentSourceBody ? emailData.body : null,
+			category_type,
+			email_id: emailData?.id,
 			attachments: Object.keys(selectedAttachments)
 				.filter((key) => selectedAttachments[key])
 				.map((key) => emailData.attachments[key]),
@@ -107,7 +127,10 @@ export default function NewEmail() {
 				setMessage("✅ Classification successful!")
 				setClassificationResults(data)
 			})
-			.catch(() => setMessage("❌ Classification failed. Please try again."))
+			.catch(() => {
+				setMessage("❌ Classification failed. Please try again.")
+				setClassificationInProgress(false)
+			})
 	}
 
 	// Handle checkbox change for attachments
@@ -137,10 +160,7 @@ export default function NewEmail() {
 				</div>
 			)}
 			{classificationResults ? (
-				<div className="classification-results">
-					<h2>Classification Results</h2>
-					<pre>{JSON.stringify(classificationResults, null, 2)}</pre>
-				</div>
+				<Report data={classificationResults?.data} />
 			) : (
 				<React.Fragment>
 					{emailData.subject && (

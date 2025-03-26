@@ -18,6 +18,6 @@ async def classify_email_file(selectedItems: dict):
             extracted_text = attachment.get("extracted_text", "")
             merged_text += extracted_text + " "
     merged_text = merged_text.strip()    
-    result = await classify(merged_text)
+    result = await classify({"text": merged_text, "email_id": selectedItems.get("email_id"), "category_type": selectedItems.get("category_type")})
     return {"message": "Email classified successfully", "data": result}
 

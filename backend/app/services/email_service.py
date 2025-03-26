@@ -10,6 +10,6 @@ async def process_email(file):
     return parsed_data
 
 
-async def classify(selected_items):
+async def classify(selected_items: dict):
     results = classify_email(selected_items)
     return results

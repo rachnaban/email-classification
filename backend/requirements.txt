@@ -7,6 +7,8 @@ pytesseract
 python-multipart
 google-generativeai
 typing-extensions
+sentence-transformers
 dataclasses
-
-
+transformers==4.41.0
+numpy<2.0.0
+py-dto
